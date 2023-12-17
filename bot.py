@@ -12,6 +12,8 @@ from telegram.ext import (Application, ChatMemberHandler, ChatJoinRequestHandler
 
 # Telegram bot token from BotFather
 TOKEN = os.environ["TOKEN"]
+PORT = int(environ.get('PORT', '8443'))
+NAME = 'fpuinvestiga-bot'
 # GSheet Key for 'Lista de socios 2023 actualizada automáticamente'
 SHEET_KEY = os.environ["SHEET_KEY"]
 # Relevant columns from the GSheet
@@ -170,7 +172,7 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     return ConversationHandler.END
 
-def main() -> None:
+def main(webhook_flag = True) -> None:
     """Start the bot."""
     # Create the Application with my bot TOKEN
     application = Application.builder().token(TOKEN).build()
@@ -196,12 +198,18 @@ def main() -> None:
 
     application.add_handler(conv_handler)
 
-    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, input_dni))
-
-    # Run the bot until the user presses Ctrl-C
-    # We pass 'allowed_updates' handle *all* updates including `chat_member` updates
-    # To reset this, simply pass `allowed_updates=[]`
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Start the Bot
+    if webhook_flag:
+        application.run_webhook(
+            listen='0.0.0.0',
+            port=PORT,
+            webhook_url=f"https://{NAME}.onrender.com/{TOKEN}"
+        )
+    else:
+        # For local development purposes
+        # We pass 'allowed_updates' handle *all* updates including `chat_member` updates
+        # To reset this, simply pass `allowed_updates=[]`
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":

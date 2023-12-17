@@ -6,4 +6,4 @@ else:
     print("Failed importing environment variables")
 
 import bot
-bot.main()
+bot.main(False)
