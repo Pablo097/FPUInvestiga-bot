@@ -172,6 +172,19 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     return ConversationHandler.END
 
+async def start_private_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Greets the user and records that they started a chat with the bot if it's a private chat..
+    """
+    user_name = update.effective_user.full_name
+    chat = update.effective_chat
+    if chat.type != Chat.PRIVATE:
+        return
+
+    logger.info("%s started a private chat with the bot", user_name)
+
+    await update.effective_message.reply_text(
+        f"Hola {user_name}. Soy el bot de FPU Investiga ☺️")
+
 def main(webhook_flag = True) -> None:
     """Start the bot."""
     # Create the Application with my bot TOKEN
@@ -198,17 +211,22 @@ def main(webhook_flag = True) -> None:
 
     application.add_handler(conv_handler)
 
+    # Interpret any other command or text message as a start of a private chat.
+    application.add_handler(MessageHandler(filters.ALL, start_private_chat))
+
     # Start the Bot
+    # We pass 'allowed_updates' handle *all* updates including `chat_member` updates
+    # To reset this, simply pass `allowed_updates=[]`
     if webhook_flag:
         application.run_webhook(
             listen='0.0.0.0',
             port=PORT,
-            webhook_url=f"https://{NAME}.onrender.com/{TOKEN}"
+            url_path=TOKEN,
+            webhook_url=f"https://{NAME}.onrender.com/{TOKEN},
+            allowed_updates=Update.ALL_TYPES"
         )
     else:
         # For local development purposes
-        # We pass 'allowed_updates' handle *all* updates including `chat_member` updates
-        # To reset this, simply pass `allowed_updates=[]`
         application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
