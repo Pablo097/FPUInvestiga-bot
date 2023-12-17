@@ -83,54 +83,62 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
     """Handles the approval or decline of the new user joining the group"""
     # TODO: Hacer que el bot avise por el grupo de admins de lo que sucede
     request = update.chat_join_request
+    flag_approved = False
 
     name = request.from_user.first_name
     if request.from_user.last_name:
         name += ' ' + request.from_user.last_name
 
-    text = f"¡Hola, {name}\! Has solicitado unirte al grupo *{request.chat.title}*\.\n\n"
+    text = f"¡Hola! Has solicitado unirte al grupo *{request.chat.title}*\.\n\n"\
+           f"Se trata de un chat de uso exclusivo para soci@s de FPU Investiga.\n"
 
     spreadsheet = gs_client.open_by_key(context.bot_data['sheet_key'])
     worksheet = spreadsheet.get_worksheet(0)
 
-    # TODO: Hacer bien la lógica de los mensajes estos
     if request.from_user.username:
-        re_pattern = re.compile(f"^(@|t\.me\/)?({request.from_user.username})[ ]*$")
+        re_pattern = re.compile(f"^(@|t\.me\/)?({escape_markdown(request.from_user.username,2)})[ ]*$")
         cell = worksheet.find(re_pattern,in_column=gs_username_col)
         if cell:
-            text += f"He encontrado tu usuario _{request.from_user.username}_ en la "\
-                    f"fila {cell.row} del Excel de socios activos\. Puedes entrar. 😊\n\n"
+            text += f"He encontrado tu usuario _@{escape_markdown(request.from_user.username,2)}_ en la "\
+                    f"base de datos de socios activos\. Puedes entrar. 😊"
             await request.approve()
+            flag_approved = True
         else:
-            text += f"Tu usuario _{request.from_user.username}_ no aparece en el "\
-                    f"Excel de socios activos\. 🤨\n\n"
+            text += f"No tenemos asociado tu usuario _@{escape_markdown(request.from_user.username,2)}_ "\
+                    f"a ningún\/a socio\/a\. "
     else:
-        text += f"Parece que no tienes nombre de usuario de Telegram\.\.\.\n\n"
+        text += f"Pareces no tener nombre de usuario de Telegram\. "
 
-    if request.from_user.last_name:
-        re_pattern = re.compile(f"^({name})(.)*$")
-        cell = worksheet.find(re_pattern,in_column=gs_name_col,case_sensitive=False)
-        if cell:
-            text += f"Tu nombre y apellidos \(_{cell.value}_\) aparecen en el Excel de socios\. 😊\n\n"
+    if not flag_approved:
+        # cell = worksheet.find(name,in_column=gs_username_col)
+        # if cell:
+        #     text += f"Aunque parece que tu nombre y apellidos coinciden con el usuario "\
+        #             f"\(_{cell.value}_\) que introdujiste al inscribirte\.\.\. "\
+        #             f"Daremos eso por bueno\.\n\n"
+        # else:
+        #     text += f"Tu nombre y apellidos tampoco coinciden con el usuario que "\
+        #             f"introdujiste al inscribirte\. 😞\n\n"
+
+        if request.from_user.last_name:
+            re_pattern = re.compile(f"^({name})(.)*$")
+            cell = worksheet.find(re_pattern,in_column=gs_name_col,case_sensitive=False)
+            if cell:
+                text += f"Parece que tu nombre y apellidos \(_{escape_markdown(name, 2)}_\) sí "\
+                        f"están en nuestra base de datos de socios activos\.\n\n"
+            else:
+                text += f"Tu nombre y apellidos tampoco aparecen en nuestra base "\
+                        f"de datos de socios activos\.\n\n"
         else:
-            text += f"Tu nombre y apellidos tampoco aparecen en el Excel de socios\. 🤔\n\n"
-    else:
-        text += f"Demasiada gente podría llamarse igual que tú\. Tu nombre asecas "\
-                f"no me sirve para buscarte en la lista de socios\.\.\.\n\n"
+            text += f"Y tu nombre asecas no me da suficiente información "\
+                    f"para buscarte en la base de datos de socios\.\n\n"
 
-    cell = worksheet.find(name,in_column=gs_username_col)
-    if cell:
-        text += f"Parece que tu nombre y apellidos coinciden con el usuario "\
-                f"_{request.from_user.username}_ que introdujiste al inscribirte\.\.\. "\
-                f"Daremos eso por bueno\.\n\n"
-    else:
-        text += f"Tu nombre y apellidos tampoco coinciden con el usuario que "\
-                f"introdujiste al inscribirte\. 😞\n\n"
-
-    text += f"Por favor, dime cuál es tu *DNI* \(sin guiones ni espacios\) para "\
-            f"comprobar que eres socio\/a\."
+        text += f"¿Me podrías facilitar tu *DNI* \(sin guiones ni espacios\) para "\
+                f"comprobar que eres socio\/a?"
 
     await context.bot.send_message(request.user_chat_id, text, ParseMode.MARKDOWN_V2)
+
+    if flag_approved:
+        return ConversationHandler.END
 
     # await request.approve()
     # await request.decline()
@@ -140,6 +148,10 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Gets the message containing the DNI of the user and checks it"""
+    # Only handle responses in the private chat
+    if update.effective_chat.type != Chat.PRIVATE:
+        return DNI
+
     if not update.message.text:
         await update.message.reply_text("Por favor, escribe únicamente tu DNI sin guiones ni espacios.")
         return DNI
@@ -156,7 +168,7 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     chat_id = context.user_data.pop('joining_chat_id')
     if cell:
         name = worksheet.cell(cell.row, gs_name_col).value
-        text = f"¡Bien\! Tu DNI _{dni}_ aparece asociado a _{name}_ en nuestra "\
+        text = f"¡Bien\! Tu DNI _{dni}_ aparece asociado a _{escape_markdown(name,2)}_ en nuestra "\
                f"lista de socios activos\.\n\nYa tienes acceso al grupo\. 😁"
         await update.effective_user.approve_join_request(chat_id)
     else:
