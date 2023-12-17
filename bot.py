@@ -12,7 +12,7 @@ from telegram.ext import (Application, ChatMemberHandler, ChatJoinRequestHandler
 
 # Telegram bot token from BotFather
 TOKEN = os.environ["TOKEN"]
-PORT = int(environ.get('PORT', '8443'))
+PORT = int(os.environ.get('PORT', '8443'))
 NAME = 'fpuinvestiga-bot'
 # GSheet Key for 'Lista de socios 2023 actualizada automáticamente'
 SHEET_KEY = os.environ["SHEET_KEY"]
