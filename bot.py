@@ -222,8 +222,8 @@ def main(webhook_flag = True) -> None:
             listen='0.0.0.0',
             port=PORT,
             url_path=TOKEN,
-            webhook_url=f"https://{NAME}.onrender.com/{TOKEN},
-            allowed_updates=Update.ALL_TYPES"
+            webhook_url=f"https://{NAME}.onrender.com/{TOKEN}",
+            allowed_updates=Update.ALL_TYPES
         )
     else:
         # For local development purposes
