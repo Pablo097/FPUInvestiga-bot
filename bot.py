@@ -89,8 +89,8 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
     if request.from_user.last_name:
         name += ' ' + request.from_user.last_name
 
-    text = f"¡Hola! Has solicitado unirte al grupo *{request.chat.title}*\.\n\n"\
-           f"Se trata de un chat de uso exclusivo para soci@s de FPU Investiga.\n"
+    text = f"¡Hola\! Has solicitado unirte al grupo *{request.chat.title}*\.\n"\
+           f"Se trata de un chat de uso exclusivo para soci@s de FPU Investiga\.\n\n"
 
     spreadsheet = gs_client.open_by_key(context.bot_data['sheet_key'])
     worksheet = spreadsheet.get_worksheet(0)
@@ -100,7 +100,7 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
         cell = worksheet.find(re_pattern,in_column=gs_username_col)
         if cell:
             text += f"He encontrado tu usuario _@{escape_markdown(request.from_user.username,2)}_ en la "\
-                    f"base de datos de socios activos\. Puedes entrar. 😊"
+                    f"base de datos de socios activos\. Puedes entrar\. 😊"
             await request.approve()
             flag_approved = True
         else:
@@ -174,7 +174,7 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     else:
         text = f"Lo siento, pero tu DNI no aparece en nuestra lista de socios "\
                 f"activos, así que no puedo dejarte acceder...\n\n"\
-                f"Si realmente eres socio, esto puede deberse a que aún no se "\
+                f"Si realmente eres socio/a, esto puede deberse a que aún no se "\
                 f"haya confirmado la recepción de la cuota de inscripción/renovación.\n\n"\
                 f"Si has escrito mal tu DNI, puedes volver a solicitar unirte "\
                 f"al grupo y volveré a ponerme en contacto contigo."
