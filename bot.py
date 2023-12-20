@@ -16,10 +16,9 @@ PORT = int(os.environ.get('PORT', '8443'))
 NAME = 'fpuinvestiga-bot'
 # GSheet Key for 'Lista de socios 2023 actualizada automáticamente'
 SHEET_KEY = os.environ["SHEET_KEY"]
-# Relevant columns from the GSheet
-gs_name_col = 1
-gs_dni_col = 3
-gs_username_col = 12
+# Relevant columns from the Google Sheet
+gs_col_info = {'name': 1, 'phone': 2, 'dni': 3, 'birthdate': 4,
+                'FPUyear': 5, 'institution': 6, 'email': 11, 'username':12}
 
 # Import Google service account credentials
 google_json = os.environ["GOOGLE_JSON"]
@@ -79,38 +78,91 @@ async def greet_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode=ParseMode.HTML,
         )
 
+def get_cell_with_associate_info(sheet_key, search_data, num_column=None) -> dict:
+    spreadsheet = gs_client.open_by_key(sheet_key)
+    worksheet = spreadsheet.get_worksheet(0)
+
+    # Regex or literal search patterns for each type of data
+    # 'usernme': re.compile(f"^(@|t\.me\/)?({request.from_user.username})[ ]*$")
+    search_pattern_dict = {'username': re.compile(f"(?=@|\/)?({search_data})[ ]*$"),
+                           'dni': search_data,
+                           'name': re.compile(f"^({search_data})(?!\S)(.)*$"),
+                           'email': search_data,
+                           'phone': search_data}
+
+    cell = None
+    # If column number is given, search only there
+    if num_column:
+        # Get key from dict
+        col_name = [cname for cname, cnum in gs_col_info.items() if cnum == num_column][0]
+        cell = worksheet.find(search_pattern_dict[col_name],
+                                in_column=num_column, case_sensitive=False)
+    # Else, search in all relevant-info columns
+    else:
+        for col_name in list(search_pattern_dict):
+            cell = worksheet.find(search_pattern_dict[col_name],
+                                in_column=gs_col_info[col_name], case_sensitive=False)
+            if cell:
+                break
+
+    return cell
+
+def format_info_from_sheet_row(sheet_key, num_row) -> str:
+    spreadsheet = gs_client.open_by_key(sheet_key)
+    worksheet = spreadsheet.get_worksheet(0)
+    row_info = worksheet.row_values(num_row)
+
+    gs_col_string = {'name': 'Nombre', 'phone': 'Teléfono', 'dni': 'DNI',
+                     'birthdate': 'Fecha nacimiento', 'FPUyear': 'Convocatoria',
+                     'institution': 'Institución', 'email': 'Email', 'username':'Usuario'}
+    gs_col_emoji = {'name': '🧑', 'phone': '☎️', 'dni': '🪪',
+                     'birthdate': '📅', 'FPUyear': '⚖️',
+                     'institution': '📍', 'email': '📧', 'username':'💬'}
+
+    text = ""
+    for col in list(gs_col_string):
+        num_col = gs_col_info[col]
+        if num_col <= len(row_info) and row_info[num_col-1]:
+            text += f"{gs_col_emoji[col]} *{gs_col_string[col]}*: "\
+                    f"`{escape_markdown(row_info[num_col-1],2)}`\n"
+
+    return text
+
+
 async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handles the approval or decline of the new user joining the group"""
     # TODO: Hacer que el bot avise por el grupo de admins de lo que sucede
     request = update.chat_join_request
-    flag_approved = False
+    is_approved = False
 
     name = request.from_user.first_name
     if request.from_user.last_name:
         name += ' ' + request.from_user.last_name
 
-    text = f"¡Hola\! Has solicitado unirte al grupo *{request.chat.title}*\.\n"\
+    text = f"¡Hola\! Has solicitado unirte al grupo *{escape_markdown(request.chat.title,2)}*\.\n"\
            f"Se trata de un chat de uso exclusivo para soci@s de FPU Investiga\.\n\n"
-
-    spreadsheet = gs_client.open_by_key(context.bot_data['sheet_key'])
-    worksheet = spreadsheet.get_worksheet(0)
+    text_admins = f"🆕 Una persona con nombre *{name}* "
 
     if request.from_user.username:
-        re_pattern = re.compile(f"^(@|t\.me\/)?({escape_markdown(request.from_user.username,2)})[ ]*$")
-        cell = worksheet.find(re_pattern,in_column=gs_username_col)
+        cell = get_cell_with_associate_info(context.bot_data['sheet_key'],
+                                request.from_user.username, gs_col_info['username'])
         if cell:
             text += f"He encontrado tu usuario _@{escape_markdown(request.from_user.username,2)}_ en la "\
                     f"base de datos de socios activos\. Puedes entrar\. 😊"
             await request.approve()
-            flag_approved = True
+            is_approved = True
         else:
             text += f"No tenemos asociado tu usuario _@{escape_markdown(request.from_user.username,2)}_ "\
                     f"a ningún\/a socio\/a\. "
+        text_admins += f"y usuario @{escape_markdown(request.from_user.username,2)} "
     else:
         text += f"Pareces no tener nombre de usuario de Telegram\. "
 
-    if not flag_approved:
-        # cell = worksheet.find(name,in_column=gs_username_col)
+    text_admins += f"ha solicitado entrar al grupo *{escape_markdown(request.chat.title,2)}*\."
+
+    if not is_approved:
+        # cell = get_cell_with_associate_info(context.bot_data['sheet_key'],
+        #                                         name, gs_col_info['username'])
         # if cell:
         #     text += f"Aunque parece que tu nombre y apellidos coinciden con el usuario "\
         #             f"\(_{cell.value}_\) que introdujiste al inscribirte\.\.\. "\
@@ -120,8 +172,8 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
         #             f"introdujiste al inscribirte\. 😞\n\n"
 
         if request.from_user.last_name:
-            re_pattern = re.compile(f"^({name})(.)*$")
-            cell = worksheet.find(re_pattern,in_column=gs_name_col,case_sensitive=False)
+            cell = get_cell_with_associate_info(context.bot_data['sheet_key'],
+                                                    name, gs_col_info['name'])
             if cell:
                 text += f"Parece que tu nombre y apellidos \(_{escape_markdown(name, 2)}_\) sí "\
                         f"están en nuestra base de datos de socios activos\.\n\n"
@@ -136,14 +188,21 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"comprobar que eres socio\/a?"
 
     await context.bot.send_message(request.user_chat_id, text, ParseMode.MARKDOWN_V2)
+    admin_message = await context.bot.send_message(str(os.environ["DEBUG_CHAT_ID"]),
+                                            text_admins, ParseMode.MARKDOWN_V2)
 
-    if flag_approved:
+    if is_approved:
+        text_admins = f"Se le ha dado acceso debido a que su usuario está en "\
+                      f"la base de datos de socios activos\.\n\n"
+        text_admins += format_info_from_sheet_row(context.bot_data['sheet_key'], cell.row)
+        await admin_message.reply_text(text_admins, ParseMode.MARKDOWN_V2)
         return ConversationHandler.END
 
     # await request.approve()
     # await request.decline()
 
     context.user_data['joining_chat_id'] = request.chat.id
+    context.user_data['admin_message'] = admin_message
     return DNI
 
 async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -151,12 +210,13 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Only handle responses in the private chat
     if update.effective_chat.type != Chat.PRIVATE:
         return DNI
+    # TODO: Hacer que el bot avise por el grupo de admins de lo que sucede
 
     if not update.message.text:
         await update.message.reply_text("Por favor, escribe únicamente tu DNI sin guiones ni espacios.")
         return DNI
 
-    match = re.search('[0-9A-Z]+', update.message.text.upper())
+    match = re.search('^[0-9A-Z]+$', update.message.text.upper())
     if not match:
         await update.message.reply_text("Por favor, escribe únicamente tu DNI sin guiones ni espacios.")
         return DNI
@@ -164,13 +224,17 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     dni = match[0]
     spreadsheet = gs_client.open_by_key(context.bot_data['sheet_key'])
     worksheet = spreadsheet.get_worksheet(0)
-    cell = worksheet.find(dni,in_column=gs_dni_col)
+    cell = worksheet.find(dni,in_column=gs_col_info['dni'])
     chat_id = context.user_data.pop('joining_chat_id')
+    admin_message = context.user_data.pop('admin_message')
     if cell:
-        name = worksheet.cell(cell.row, gs_name_col).value
+        name = worksheet.cell(cell.row, gs_col_info['name']).value
         text = f"¡Bien\! Tu DNI _{dni}_ aparece asociado a _{escape_markdown(name,2)}_ en nuestra "\
                f"lista de socios activos\.\n\nYa tienes acceso al grupo\. 😁"
         await update.effective_user.approve_join_request(chat_id)
+        text_admins = f"Se le ha dado acceso ya que el DNI introducido está en "\
+                      f"la base de datos de socios activos\.\n\n"
+        text_admins += format_info_from_sheet_row(context.bot_data['sheet_key'], cell.row)
     else:
         text = f"Lo siento, pero tu DNI no aparece en nuestra lista de socios "\
                 f"activos, así que no puedo dejarte acceder...\n\n"\
@@ -180,13 +244,39 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 f"al grupo y volveré a ponerme en contacto contigo."
         text = escape_markdown(text, 2)
         await update.effective_user.decline_join_request(chat_id)
+        text_admins = f"⛔️ Denegado\.\nEl usuario ha introducido un DNI _{dni}_ "\
+                      f"que no se ha encontrado en la base de datos de socios activos\."
     await update.message.reply_text(text, ParseMode.MARKDOWN_V2)
+    await admin_message.reply_text(text_admins, ParseMode.MARKDOWN_V2)
 
     return ConversationHandler.END
 
+async def search_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Identifies a possible associate by any information saved about them
+    in the database. Can only be used from the admins group chat."""
+    if str(update.effective_chat.id)!=str(os.environ["DEBUG_CHAT_ID"]):
+        return
+
+    if not context.args:
+        text = "Sintaxis incorrecta\. Uso: `/buscar <texto>`"
+        await update.effective_message.reply_text(text, ParseMode.MARKDOWN_V2)
+        return
+
+    data = ' '.join(context.args)
+    cell = get_cell_with_associate_info(context.bot_data['sheet_key'], data)
+
+    if not cell:
+        text = f"Lo siento, no he podido encontrar `{escape_markdown(data,2)}` "\
+               f"en la base de datos de socios activos\."
+    else:
+        text = f"He encontrado esa información en la ficha de este\/a socio\/a:\n\n"
+        text += format_info_from_sheet_row(context.bot_data['sheet_key'], cell.row)
+
+    await update.effective_message.reply_text(text, ParseMode.MARKDOWN_V2)
+
+
 async def start_private_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Greets the user and records that they started a chat with the bot if it's a private chat..
-    """
+    """Greets the user."""
     user_name = update.effective_user.full_name
     chat = update.effective_chat
     if chat.type != Chat.PRIVATE:
@@ -197,6 +287,15 @@ async def start_private_chat(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.effective_message.reply_text(
         f"Hola {user_name}. Soy el bot de FPU Investiga ☺️")
 
+async def give_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Responses with the effective chat ID of the chat from where the command
+    \id is sent."""
+    text = f"ID usuario: `{update.effective_user.id}`"
+    if update.effective_chat.type != Chat.PRIVATE:
+        text += f"\nID chat: `{update.effective_chat.id}`"
+    await update.effective_message.reply_text(text, ParseMode.MARKDOWN_V2)
+
+
 def main(webhook_flag = True) -> None:
     """Start the bot."""
     # Create the Application with my bot TOKEN
@@ -205,6 +304,12 @@ def main(webhook_flag = True) -> None:
     # TODO: Make this an input of a command and make it persistent
     # https://github.com/python-telegram-bot/python-telegram-bot/wiki/Making-your-bot-persistent
     application.bot_data['sheet_key'] = SHEET_KEY
+
+    # Process /id command
+    application.add_handler(CommandHandler('id', give_id))
+
+    # Process /buscar command
+    application.add_handler(CommandHandler('buscar', search_user))
 
     # Handle members joining/leaving chats.
     application.add_handler(ChatMemberHandler(greet_chat_members, ChatMemberHandler.CHAT_MEMBER))
@@ -219,8 +324,8 @@ def main(webhook_flag = True) -> None:
         fallbacks=[],
         per_chat=False
     )
-    # TODO: Hacer que el bot sepa si alguien le ha bloqueado y avisar a los admins
 
+    # TODO: Hacer que el bot sepa si alguien le ha bloqueado y avisar a los admins
     application.add_handler(conv_handler)
 
     # Interpret any other command or text message as a start of a private chat.
