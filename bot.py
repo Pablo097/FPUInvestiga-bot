@@ -6,6 +6,7 @@ from typing import Optional, Tuple
 from telegram import Chat, ChatMember, ChatMemberUpdated, Update, ChatJoinRequest
 from telegram.constants import ParseMode
 from telegram.helpers import escape_markdown
+from telegram.error import Forbidden
 from telegram.ext import (Application, ChatMemberHandler, ChatJoinRequestHandler,
                           CommandHandler, ContextTypes, MessageHandler, filters,
                           ConversationHandler)
@@ -131,7 +132,6 @@ def format_info_from_sheet_row(sheet_key, num_row) -> str:
 
 async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handles the approval or decline of the new user joining the group"""
-    # TODO: Hacer que el bot avise por el grupo de admins de lo que sucede
     request = update.chat_join_request
     is_approved = False
 
@@ -149,7 +149,6 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
         if cell:
             text += f"He encontrado tu usuario _@{escape_markdown(request.from_user.username,2)}_ en la "\
                     f"base de datos de socios activos\. Puedes entrar\. 😊"
-            await request.approve()
             is_approved = True
         else:
             text += f"No tenemos asociado tu usuario _@{escape_markdown(request.from_user.username,2)}_ "\
@@ -187,15 +186,25 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
         text += f"¿Me podrías facilitar tu *DNI* \(sin guiones ni espacios\) para "\
                 f"comprobar que eres socio\/a?"
 
-    await context.bot.send_message(request.user_chat_id, text, ParseMode.MARKDOWN_V2)
-    admin_message = await context.bot.send_message(str(os.environ["DEBUG_CHAT_ID"]),
-                                            text_admins, ParseMode.MARKDOWN_V2)
+    try:
+        await context.bot.send_message(request.user_chat_id, text, ParseMode.MARKDOWN_V2)
+        admin_message = await context.bot.send_message(str(os.environ["DEBUG_CHAT_ID"]),
+                                                text_admins, ParseMode.MARKDOWN_V2)
 
-    if is_approved:
-        text_admins = f"Se le ha dado acceso debido a que su usuario está en "\
-                      f"la base de datos de socios activos\.\n\n"
-        text_admins += format_info_from_sheet_row(context.bot_data['sheet_key'], cell.row)
-        await admin_message.reply_text(text_admins, ParseMode.MARKDOWN_V2)
+        if is_approved:
+            await request.approve()
+            text_admins = f"Se le ha dado acceso debido a que su usuario está en "\
+                          f"la base de datos de socios activos\.\n\n"
+            text_admins += format_info_from_sheet_row(context.bot_data['sheet_key'], cell.row)
+            await admin_message.reply_text(text_admins, ParseMode.MARKDOWN_V2)
+            return ConversationHandler.END
+
+    except Forbidden:
+        # User has blocked the bot
+        text_admins = f"⚠️ El usuario *{name}* ha solicitado acceso al grupo "\
+                      f"pero tiene bloqueado al bot\. Se requiere intervención humana\."
+        await context.bot.send_message(str(os.environ["DEBUG_CHAT_ID"]),
+                                            text_admins, ParseMode.MARKDOWN_V2)
         return ConversationHandler.END
 
     # await request.approve()
@@ -210,7 +219,6 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Only handle responses in the private chat
     if update.effective_chat.type != Chat.PRIVATE:
         return DNI
-    # TODO: Hacer que el bot avise por el grupo de admins de lo que sucede
 
     if not update.message.text:
         await update.message.reply_text("Por favor, escribe únicamente tu DNI sin guiones ni espacios.")
@@ -274,7 +282,6 @@ async def search_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     await update.effective_message.reply_text(text, ParseMode.MARKDOWN_V2)
 
-
 async def start_private_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Greets the user."""
     user_name = update.effective_user.full_name
@@ -295,6 +302,10 @@ async def give_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         text += f"\nID chat: `{update.effective_chat.id}`"
     await update.effective_message.reply_text(text, ParseMode.MARKDOWN_V2)
 
+async def error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log Errors caused by Updates."""
+    logger.warning('Update "%s" caused error "%s"', update, context.error)
+
 
 def main(webhook_flag = True) -> None:
     """Start the bot."""
@@ -304,6 +315,9 @@ def main(webhook_flag = True) -> None:
     # TODO: Make this an input of a command and make it persistent
     # https://github.com/python-telegram-bot/python-telegram-bot/wiki/Making-your-bot-persistent
     application.bot_data['sheet_key'] = SHEET_KEY
+
+    # log all errors
+    application.add_error_handler(error)
 
     # Process /id command
     application.add_handler(CommandHandler('id', give_id))
