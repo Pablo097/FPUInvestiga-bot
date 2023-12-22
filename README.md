@@ -2,7 +2,7 @@
 
 **FPUInvestiga Bot** is a Telegram bot written in Python and built on the [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) API (v20.7).
 
-The purpose of this bot is to control access to the Telegram group of FPU Investiga association members, letting in only active members collected in an associated Google spreadsheet. The bot itself can be found at [@FPUInvestiga_bot](https://t.me/fpuinvestiga_bot).
+The purpose of this bot is to control access to the Telegram group of FPU Investiga association members, letting in only active members collected in an associated Google spreadsheet. The bot itself is deployed in Render and can be found at [@FPUInvestiga_bot](https://t.me/fpuinvestiga_bot).
 ## Run locally
 
 First, clone the project
@@ -18,6 +18,7 @@ pip install -r requirements.txt
 In the folder where you have cloned the project (`FPUInvestiga-bot`), create a file named `.env` where the environment variables will be stored. The Telegram bot token is obtained talking to the [@BotFather](https://t.me/BotFather), and the Google API authentication information to gain access to the Drive spreadsheets is obtained following, for example, [this tutorial](https://www.datacamp.com/tutorial/how-to-analyze-data-in-google-sheets-with-python-a-step-by-step-guide). The content of the `.env` file must look like this (the `<...>` represents confidential data not shown here):
 ```
 TOKEN="<your telegram bot token>"
+DEBUG_CHAT_ID="<the telegram chat_id of the chat where the bot will send debug messages"
 GOOGLE_JSON={  "type": "service_account",  "project_id": "<...>",  "private_key_id": "<...>",  "private_key": "-----BEGIN PRIVATE KEY-----\n<...>\n-----END PRIVATE KEY-----\n",  "client_email": "<...>,  "client_id": "<...>",  "auth_uri": "<...>",  "token_uri": "<...>",  "auth_provider_x509_cert_url": "<...>",  "client_x509_cert_url": "<...>",  "universe_domain": "<...>"}
 SHEET_KEY="<the active members google sheet ID>"
 ```
