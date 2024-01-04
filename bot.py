@@ -85,9 +85,9 @@ def get_cell_with_associate_info(sheet_key, search_data, num_column=None) -> dic
 
     # Regex or literal search patterns for each type of data
     # 'usernme': re.compile(f"^(@|t\.me\/)?({request.from_user.username})[ ]*$")
-    search_pattern_dict = {'username': re.compile(f"(?=@|\/)?({search_data})[ ]*$"),
+    search_pattern_dict = {'username': re.compile(f"(?=@|\/)?({search_data})[ ]*$", re.I),
                            'dni': search_data,
-                           'name': re.compile(f"^({search_data})(?!\S)(.)*$"),
+                           'name': re.compile(f"^({search_data})(?!\S)(.)*$", re.I),
                            'email': search_data,
                            'phone': search_data}
 
