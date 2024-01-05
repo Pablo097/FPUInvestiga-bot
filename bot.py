@@ -18,7 +18,7 @@ NAME = 'fpuinvestiga-bot'
 # GSheet Key for 'Lista de socios 2023 actualizada automáticamente'
 SHEET_KEY = os.environ["SHEET_KEY"]
 # Relevant columns from the Google Sheet
-gs_col_info = {'name': 1, 'phone': 2, 'dni': 3, 'birthdate': 4,
+gs_col_number = {'name': 1, 'phone': 2, 'dni': 3, 'birthdate': 4,
                 'FPUyear': 5, 'institution': 6, 'email': 11, 'username':12}
 
 # Import Google service account credentials
@@ -79,13 +79,12 @@ async def greet_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE)
             parse_mode=ParseMode.HTML,
         )
 
-def get_cell_with_associate_info(sheet_key, search_data, num_column=None) -> dict:
+def get_cell_with_associate_info(sheet_key, search_data, num_column=None) -> 'Cell':
     spreadsheet = gs_client.open_by_key(sheet_key)
     worksheet = spreadsheet.get_worksheet(0)
 
     # Regex or literal search patterns for each type of data
-    # 'usernme': re.compile(f"^(@|t\.me\/)?({request.from_user.username})[ ]*$")
-    search_pattern_dict = {'username': re.compile(f"(?=@|\/)?({search_data})[ ]*$", re.I),
+    search_pattern_dict = {'username': re.compile(f"^(@|\S*\/)?({search_data})[ ]*$", re.I),
                            'dni': search_data,
                            'name': re.compile(f"^({search_data})(?!\S)(.)*$", re.I),
                            'email': search_data,
@@ -95,14 +94,20 @@ def get_cell_with_associate_info(sheet_key, search_data, num_column=None) -> dic
     # If column number is given, search only there
     if num_column:
         # Get key from dict
-        col_name = [cname for cname, cnum in gs_col_info.items() if cnum == num_column][0]
+        col_name = [cname for cname, cnum in gs_col_number.items() if cnum == num_column][0]
         cell = worksheet.find(search_pattern_dict[col_name],
                                 in_column=num_column, case_sensitive=False)
     # Else, search in all relevant-info columns
     else:
         for col_name in list(search_pattern_dict):
-            cell = worksheet.find(search_pattern_dict[col_name],
-                                in_column=gs_col_info[col_name], case_sensitive=False)
+            if col_name=='name':
+                cell = worksheet.findall(re.compile(f"^(.)*(?<!\S)({search_data})(?!\S)(.)*$", re.I),
+                                    in_column=gs_col_number[col_name], case_sensitive=False)
+                if len(cell)==1:
+                    cell = cell[0]
+            else:
+                cell = worksheet.find(search_pattern_dict[col_name],
+                                    in_column=gs_col_number[col_name], case_sensitive=False)
             if cell:
                 break
 
@@ -122,7 +127,7 @@ def format_info_from_sheet_row(sheet_key, num_row) -> str:
 
     text = ""
     for col in list(gs_col_string):
-        num_col = gs_col_info[col]
+        num_col = gs_col_number[col]
         if num_col <= len(row_info) and row_info[num_col-1]:
             text += f"{gs_col_emoji[col]} *{gs_col_string[col]}*: "\
                     f"`{escape_markdown(row_info[num_col-1],2)}`\n"
@@ -145,7 +150,7 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if request.from_user.username:
         cell = get_cell_with_associate_info(context.bot_data['sheet_key'],
-                                request.from_user.username, gs_col_info['username'])
+                                request.from_user.username, gs_col_number['username'])
         if cell:
             text += f"He encontrado tu usuario _@{escape_markdown(request.from_user.username,2)}_ en la "\
                     f"base de datos de socios activos\. Puedes entrar\. 😊"
@@ -161,7 +166,7 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if not is_approved:
         # cell = get_cell_with_associate_info(context.bot_data['sheet_key'],
-        #                                         name, gs_col_info['username'])
+        #                                         name, gs_col_number['username'])
         # if cell:
         #     text += f"Aunque parece que tu nombre y apellidos coinciden con el usuario "\
         #             f"\(_{cell.value}_\) que introdujiste al inscribirte\.\.\. "\
@@ -172,7 +177,7 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
 
         if request.from_user.last_name:
             cell = get_cell_with_associate_info(context.bot_data['sheet_key'],
-                                                    name, gs_col_info['name'])
+                                                    name, gs_col_number['name'])
             if cell:
                 text += f"Parece que tu nombre y apellidos \(_{escape_markdown(name, 2)}_\) sí "\
                         f"están en nuestra base de datos de socios activos\.\n\n"
@@ -232,11 +237,11 @@ async def input_dni(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     dni = match[0]
     spreadsheet = gs_client.open_by_key(context.bot_data['sheet_key'])
     worksheet = spreadsheet.get_worksheet(0)
-    cell = worksheet.find(dni,in_column=gs_col_info['dni'])
+    cell = worksheet.find(dni,in_column=gs_col_number['dni'])
     chat_id = context.user_data.pop('joining_chat_id')
     admin_message = context.user_data.pop('admin_message')
     if cell:
-        name = worksheet.cell(cell.row, gs_col_info['name']).value
+        name = worksheet.cell(cell.row, gs_col_number['name']).value
         text = f"¡Bien\! Tu DNI _{dni}_ aparece asociado a _{escape_markdown(name,2)}_ en nuestra "\
                f"lista de socios activos\.\n\nYa tienes acceso al grupo\. 😁"
         await update.effective_user.approve_join_request(chat_id)
@@ -277,8 +282,15 @@ async def search_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         text = f"Lo siento, no he podido encontrar `{escape_markdown(data,2)}` "\
                f"en la base de datos de socios activos\."
     else:
-        text = f"He encontrado esa información en la ficha de este\/a socio\/a:\n\n"
-        text += format_info_from_sheet_row(context.bot_data['sheet_key'], cell.row)
+        # If 'cell' is a list of cells, then multiple associates with the same
+        # name have been found
+        if type(cell) is list:
+            text = f"He encontrado varias personas socias que coinciden con tu búsqueda:\n\n"
+            for cell_aux in cell:
+                text += f"• {escape_markdown(cell_aux.value,2)}\n"
+        else:
+            text = f"He encontrado esa información en la ficha de este\/a socio\/a:\n\n"
+            text += format_info_from_sheet_row(context.bot_data['sheet_key'], cell.row)
 
     await update.effective_message.reply_text(text, ParseMode.MARKDOWN_V2)
 
