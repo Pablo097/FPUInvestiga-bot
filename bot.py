@@ -15,8 +15,10 @@ from telegram.ext import (Application, ChatMemberHandler, ChatJoinRequestHandler
 TOKEN = os.environ["TOKEN"]
 PORT = int(os.environ.get('PORT', '8443'))
 NAME = 'fpuinvestiga-bot'
-# GSheet Key for 'Lista de socios 2023 actualizada automáticamente'
+# GSheet Key for 'Lista de socios 2024 actualizada automáticamente'
 SHEET_KEY = os.environ["SHEET_KEY"]
+# GSheet Key for 'Lista de socios 2023 actualizada automáticamente'
+SHEET_KEY_OLD = os.environ.get("SHEET_KEY_OLD", None)
 # Relevant columns from the Google Sheet
 gs_col_number = {'name': 1, 'phone': 2, 'dni': 3, 'birthdate': 4,
                 'FPUyear': 5, 'institution': 6, 'email': 11, 'username':12}
@@ -146,7 +148,7 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
 
     text = f"¡Hola\! Has solicitado unirte al grupo *{escape_markdown(request.chat.title,2)}*\.\n"\
            f"Se trata de un chat de uso exclusivo para soci@s de FPU Investiga\.\n\n"
-    text_admins = f"🆕 Una persona con nombre *{name}* "
+    text_admins = f"🆕 Una persona con nombre *{request.from_user.mention_markdown_v2()}* "
 
     if request.from_user.username:
         cell = get_cell_with_associate_info(context.bot_data['sheet_key'],
@@ -276,21 +278,31 @@ async def search_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     data = ' '.join(context.args)
-    cell = get_cell_with_associate_info(context.bot_data['sheet_key'], data)
+    sheet_key = context.bot_data['sheet_key']
+    cell = get_cell_with_associate_info(sheet_key, data)
+    text = ""
+
+    # Search in old GSheet, in case was a former associate
+    if not cell and 'sheet_key_old' in context.bot_data:
+        sheet_key = context.bot_data['sheet_key_old']
+        cell = get_cell_with_associate_info(sheet_key, data)
+        if cell:
+            text += f"No he podido encontrar tu búsqueda en la base de datos de socios "\
+                    f"actual, pero sí en la del año pasado\.\n\n"
 
     if not cell:
-        text = f"Lo siento, no he podido encontrar `{escape_markdown(data,2)}` "\
-               f"en la base de datos de socios activos\."
+        text += f"Lo siento, no he podido encontrar `{escape_markdown(data,2)}` "\
+                f"en la base de datos de socios\."
     else:
         # If 'cell' is a list of cells, then multiple associates with the same
         # name have been found
         if type(cell) is list:
-            text = f"He encontrado varias personas socias que coinciden con tu búsqueda:\n\n"
+            text += f"He encontrado varias personas socias que coinciden con tu búsqueda:\n\n"
             for cell_aux in cell:
                 text += f"• {escape_markdown(cell_aux.value,2)}\n"
         else:
-            text = f"He encontrado esa información en la ficha de este\/a socio\/a:\n\n"
-            text += format_info_from_sheet_row(context.bot_data['sheet_key'], cell.row)
+            text += f"He encontrado esa información en la ficha de este\/a socio\/a:\n\n"
+            text += format_info_from_sheet_row(sheet_key, cell.row)
 
     await update.effective_message.reply_text(text, ParseMode.MARKDOWN_V2)
 
@@ -327,6 +339,8 @@ def main(webhook_flag = True) -> None:
     # TODO: Make this an input of a command and make it persistent
     # https://github.com/python-telegram-bot/python-telegram-bot/wiki/Making-your-bot-persistent
     application.bot_data['sheet_key'] = SHEET_KEY
+    if SHEET_KEY_OLD:
+        application.bot_data['sheet_key_old'] = SHEET_KEY_OLD
 
     # log all errors
     application.add_error_handler(error)

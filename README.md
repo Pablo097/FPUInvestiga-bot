@@ -21,6 +21,7 @@ TOKEN="<your telegram bot token>"
 DEBUG_CHAT_ID="<the telegram chat_id of the chat where the bot will send debug messages"
 GOOGLE_JSON={  "type": "service_account",  "project_id": "<...>",  "private_key_id": "<...>",  "private_key": "-----BEGIN PRIVATE KEY-----\n<...>\n-----END PRIVATE KEY-----\n",  "client_email": "<...>,  "client_id": "<...>",  "auth_uri": "<...>",  "token_uri": "<...>",  "auth_provider_x509_cert_url": "<...>",  "client_x509_cert_url": "<...>",  "universe_domain": "<...>"}
 SHEET_KEY="<the active members google sheet ID>"
+SHEET_KEY_OLD="<a former members google sheet ID to find info there too, if needed (OPTIONAL)>"
 ```
 Finally, start the bot by running `debug_bot.py`.
 
