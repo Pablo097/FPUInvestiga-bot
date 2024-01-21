@@ -86,9 +86,10 @@ def get_cell_with_associate_info(sheet_key, search_data, num_column=None) -> 'Ce
     worksheet = spreadsheet.get_worksheet(0)
 
     # Regex or literal search patterns for each type of data
-    search_pattern_dict = {'username': re.compile(f"^(@|\S*\/)?({search_data})[ ]*$", re.I),
+    # The order of definition determines the data priority when no 'num_column' is given
+    search_pattern_dict = {'name': re.compile(f"^({search_data})(?!\S)(.)*$", re.I),
+                           'username': re.compile(f"^(@|\S*\/)?({search_data})[ ]*$", re.I),
                            'dni': search_data,
-                           'name': re.compile(f"^({search_data})(?!\S)(.)*$", re.I),
                            'email': search_data,
                            'phone': search_data}
 
@@ -103,6 +104,7 @@ def get_cell_with_associate_info(sheet_key, search_data, num_column=None) -> 'Ce
     else:
         for col_name in list(search_pattern_dict):
             if col_name=='name':
+                # When searching for everything, also several names, or surnames-only, can be found
                 cell = worksheet.findall(re.compile(f"^(.)*(?<!\S)({search_data})(?!\S)(.)*$", re.I),
                                     in_column=gs_col_number[col_name], case_sensitive=False)
                 if len(cell)==1:
