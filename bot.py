@@ -210,7 +210,7 @@ async def handle_join_requests(update: Update, context: ContextTypes.DEFAULT_TYP
 
     except Forbidden:
         # User has blocked the bot
-        text_admins = f"⚠️ El usuario *{name}* ha solicitado acceso al grupo "\
+        text_admins = f"⚠️ El usuario *{escape_markdown(name, 2)}* ha solicitado acceso al grupo "\
                       f"pero tiene bloqueado al bot\. Se requiere intervención humana\."
         await context.bot.send_message(str(os.environ["DEBUG_CHAT_ID"]),
                                             text_admins, ParseMode.MARKDOWN_V2)
